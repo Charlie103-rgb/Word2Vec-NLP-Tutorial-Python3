@@ -17,3 +17,15 @@
 - **Part 3：Word2Vec Clustering / Bag of Centroids**
   
   使用 K-Means 对 Word2Vec 词向量进行聚类，将语义相近的词划分到同一 cluster，并使用 Bag of Centroids 将每条评论表示为基于语义词簇的固定维度向量，再使用 Random Forest 完成分类。
+
+## Kaggle 实验结果
+
+三个模型生成的 CSV 文件均提交至 Kaggle "Bag of Words Meets Bags of Popcorn" 竞赛进行测试，结果如下：
+
+| 方法 | Kaggle Score |
+| --- | ---: |
+| Bag of Words + Random Forest | 0.84432 |
+| Word2Vec Average Vectors + Random Forest | 0.82792 |
+| Word2Vec Bag of Centroids + Random Forest | 0.84768 |
+
+在三个实验中，基于 Word2Vec 聚类得到的 Bag of Centroids 方法取得了最高的 Kaggle Score。
