@@ -170,7 +170,7 @@ Kaggle Score：**0.88588**
 
 ## Part 6：Transformer Encoder
 
-在学习 Attention 之后，进一步实现基于 **Transformer Encoder** 的 IMDb 情感分类模型。
+实现基于 **Transformer Encoder** 的 IMDb 情感分类模型。
 
 通过 Multi-Head Self-Attention 直接建模不同 token 之间的关系。
 
@@ -236,6 +236,60 @@ Kaggle Score：**0.80772**
 
 ---
 
+## Part 7：BERT Fine-tuning
+
+在 Transformer Encoder 实验的基础上，进一步学习预训练语言模型 **BERT**，并使用 Hugging Face 提供的 `bert-base-uncased` 在 IMDb 情感分类任务上进行 Fine-tuning。
+
+加载已经完成预训练的 `bert-base-uncased` 权重，并在 IMDb 有标签数据上进行二分类微调。
+
+主要流程：
+
+`IMDb Review → WordPiece Tokenizer → Pretrained BERT → [CLS] Representation → Linear → Sentiment`
+
+模型输入经过 WordPiece Tokenizer 处理，并加入 `[CLS]` 和 `[SEP]` 等特殊 token。BERT 使用 Token Embedding、Position Embedding 和 Segment Embedding 构造输入表示，再经过 12 层双向 Transformer Encoder 获得上下文化表示。
+
+对于情感分类任务，使用 `[CLS]` 对应的序列级表示，并通过 `Linear(768, 2)` 完成 Positive / Negative 二分类。
+
+### BERT 配置
+
+* Pretrained Model：`bert-base-uncased`
+* Tokenizer：BertTokenizerFast / WordPiece
+* Vocabulary size：30,522
+* Maximum sequence length：512
+* Hidden size：768
+* Encoder layers：12
+* Attention heads：12
+* Dimension per head：64
+* Feedforward dimension：3,072
+* Activation：GELU
+* Dropout：0.1
+* Pooling：`[CLS]` Pooler
+* Classifier：`Linear(768, 2)`
+* Loss：CrossEntropyLoss
+* Optimizer：AdamW
+* Learning rate：`5e-5`
+* Weight decay：0.01
+* Warmup steps：500
+* Scheduler：Linear
+* Gradient clipping：1.0
+* Train batch size：6
+* Evaluation batch size：12
+* Epochs：3
+
+训练过程中整个预训练 BERT 与新加入的分类层共同进行 Fine-tuning。
+
+| Epoch | Train Loss | Train Accuracy | Validation Accuracy |
+| ----: | ---------: | -------------: | ------------------: |
+|     1 |   0.395091 |         86.99% |              90.00% |
+|     2 |   0.225738 |         94.85% |              92.52% |
+|     3 |   0.087335 |         98.36% |          **93.16%** |
+
+最佳 Validation Accuracy：**93.16%**
+
+Kaggle Score：**0.93268**
+
+---
+
 ## Kaggle 实验结果
 
 目前所有有效模型生成的 CSV 文件均已提交至 Kaggle **“Bag of Words Meets Bags of Popcorn”** 竞赛。
@@ -246,11 +300,10 @@ Kaggle Score：**0.80772**
 | Word2Vec Average Vectors + Random Forest  |      0.82792 |
 | Word2Vec Bag of Centroids + Random Forest |      0.84768 |
 | GloVe + CNN                               |      0.78600 |
-| GloVe + LSTM                              |  **0.88660** |
+| GloVe + LSTM                              |      0.88660 |
 | GloVe + GRU                               |      0.64148 |
 | GloVe + Temporal Attention-LSTM           |      0.88588 |
 | Transformer Encoder                       |      0.80772 |
+| BERT-base-uncased Fine-tuning             |  **0.93268** |
 
-在当前实验配置下，**GloVe + LSTM** 获得了最高的 Kaggle Score：**0.88660**。
-
-Transformer Encoder 实验则使用随机初始化、可训练的 300 维 Word Embedding，不使用 GloVe。
+在当前实验配置下，**BERT-base-uncased Fine-tuning** 获得了最高的 Kaggle Score：**0.93268**。
