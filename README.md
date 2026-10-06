@@ -290,6 +290,235 @@ Kaggle Score：**0.93268**
 
 ---
 
+## Part 8：RoBERTa-large Fine-tuning
+
+在 BERT 实验的基础上，进一步使用 **RoBERTa-large** 进行 IMDb 情感分类。
+
+RoBERTa 保留了 Transformer Encoder 的主体结构，并在 BERT 的基础上进一步优化预训练策略，包括取消 NSP、采用 Dynamic Masking，并使用更多数据和更充分的预训练。
+
+本实验加载 Hugging Face 官方预训练模型：
+
+`FacebookAI/roberta-large`
+
+并在 IMDb 有标签数据上进行全参数 Fine-tuning。
+
+主要流程：
+
+`IMDb Review → Byte-level BPE Tokenizer → Pretrained RoBERTa-large → First Token Representation → Classification Head → Sentiment`
+
+### RoBERTa-large 配置
+
+* Pretrained Model：`FacebookAI/roberta-large`
+* Tokenizer：RobertaTokenizerFast / Byte-level BPE
+* Vocabulary size：50,265
+* Maximum sequence length：512
+* Hidden size：1,024
+* Encoder layers：24
+* Attention heads：16
+* Dimension per head：64
+* Feedforward dimension：4,096
+* Dropout：0.1
+* Parameter count：约 355M
+* Fine-tuning：Full Fine-tuning
+* FP16：True
+* Gradient checkpointing：True
+* Train micro-batch：1
+* Gradient accumulation：4
+* Effective batch size：4
+* Learning rate：`5e-6`
+* Weight decay：0.01
+* Warmup steps：500
+* Epochs：3
+
+最佳 Validation Accuracy：**96.18%**
+
+Kaggle Score：**96.35%**
+
+---
+
+## Part 9：DeBERTa-Large Fine-tuning
+
+在 RoBERTa 实验之后，进一步学习并实验 **DeBERTa**。
+
+DeBERTa 在 BERT / RoBERTa 的 Encoder-only Transformer 路线上进一步引入：
+
+* Disentangled Attention
+* Relative Position Representation
+* Enhanced Mask Decoder
+
+本实验使用：
+
+`microsoft/deberta-large`
+
+作为 pretrained backbone，并在 IMDb 情感分类任务上进行全参数 Fine-tuning。
+
+主要流程：
+
+`IMDb Review → DeBERTa Tokenizer → Pretrained DeBERTa-large → Disentangled Transformer Encoder → Classification Head → Sentiment`
+
+### DeBERTa-Large 配置
+
+* Pretrained Model：`microsoft/deberta-large`
+* Hidden size：1,024
+* Encoder layers：24
+* Attention heads：16
+* Feedforward dimension：4,096
+* Maximum sequence length：512
+* Attention：Disentangled Attention
+* Relative position：Enabled
+* Fine-tuning：Full Fine-tuning
+
+最佳 Validation Accuracy：**95.74%**
+
+Kaggle Score：**96.03%**
+
+---
+
+## Part 10：DeBERTa-Large + LoRA
+
+在 DeBERTa 全参数 Fine-tuning 的基础上，进一步学习 **Parameter-Efficient Fine-Tuning（PEFT）**。
+
+首先实验 **LoRA（Low-Rank Adaptation）**。
+
+LoRA 冻结 pretrained backbone 的原始权重，并通过低秩矩阵学习任务相关的权重增量：
+
+\[
+\Delta W = BA
+\]
+
+有效权重可表示为：
+
+\[
+W_{\text{effective}}
+=
+W+
+\frac{\alpha}{r}BA
+\]
+
+本实验将 LoRA 挂载到 DeBERTa-large 的 Attention `in_proj` 模块，仅训练少量 LoRA 参数和分类头，而不对整个 DeBERTa backbone 进行全参数更新。
+
+主要流程：
+
+`IMDb Review → Pretrained DeBERTa-large + LoRA Adapter → Classification Head → Sentiment`
+
+### LoRA 配置
+
+* Base Model：`microsoft/deberta-large`
+* PEFT Method：LoRA
+* Rank `r`：16
+* LoRA alpha：32
+* LoRA dropout：0.05
+* Target modules：24 层 Attention `in_proj`
+* Trainable parameters：2,624,514
+* Trainable percentage：0.6419%
+* Gradient checkpointing：Enabled
+* Checkpoint interval：每 500 optimizer steps
+
+最佳 Validation Accuracy：**96.08%**
+
+Kaggle Score：**96.396%**
+
+---
+
+## Part 11：DeBERTa-Large + AdaLoRA
+
+在 LoRA 的基础上进一步实验 **AdaLoRA（Adaptive LoRA）**。
+
+普通 LoRA 为各目标层使用固定 rank，而 AdaLoRA 根据训练过程动态评估不同低秩方向的重要性，并重新分配有限的 rank budget。
+
+主要流程：
+
+`IMDb Review → Pretrained DeBERTa-large + AdaLoRA Adapter → Classification Head → Sentiment`
+
+### AdaLoRA 配置
+
+* Base Model：`microsoft/deberta-large`
+* PEFT Method：AdaLoRA
+* Initial rank：16
+* Target rank：8
+* LoRA alpha：32
+* LoRA dropout：0.05
+* `tinit`：0
+* `tfinal`：0
+* `deltaT`：1
+* `beta1`：0.85
+* `beta2`：0.85
+* Orthogonal regularization weight：0.5
+* Target modules：24 层 Attention `in_proj`
+* Trainable parameters：2,624,898
+* Trainable percentage：0.6420%
+* 最终活动 rank 总数：192
+* Checkpoint interval：每 500 optimizer steps
+
+训练结果：
+
+| Epoch | Train Loss | Train Accuracy | Validation Accuracy |
+| ----: | ---------: | -------------: | ------------------: |
+| 1 | 0.7045 | 63.56% | 94.52% |
+| 2 | 0.1957 | 94.34% | 94.94% |
+| 3 | 0.1697 | 94.785% | **94.96%** |
+
+AdaLoRA 的训练 loss 包含正交正则项，因此不能直接与普通 LoRA 的 loss 数值进行比较。
+
+最佳 Validation Accuracy：**94.96%**
+
+Kaggle Score：**95.568%**
+
+---
+
+## Part 12：DeBERTa-Large + Prefix Tuning
+
+进一步实验 **Prefix Tuning**。
+
+Prefix Tuning 不直接修改 DeBERTa backbone 的大规模预训练权重，而是引入一组可训练的 virtual prefix representations，使 Attention 在处理真实文本时同时利用学习得到的 prefix 信息。
+
+主要流程：
+
+`Learnable Prefix → DeBERTa Attention → Frozen Pretrained DeBERTa-large → Classification Head → Sentiment`
+
+### Prefix Tuning 配置
+
+* Base Model：`microsoft/deberta-large`
+* PEFT Method：Prefix Tuning
+* Virtual tokens：20
+* Backbone：Frozen
+* Classification head：Trainable
+* Gradient checkpointing：Enabled
+* Checkpoint interval：每 500 optimizer steps
+
+最佳 Validation Accuracy：**95.26%**
+
+Kaggle Score：**95.884%**
+
+---
+
+## Part 13：DeBERTa-Large + P-Tuning
+
+进一步实验 **P-Tuning**。
+
+P-Tuning 在输入端引入可训练的 continuous virtual prompt，并通过 Prompt Encoder 学习适合当前任务的连续 Prompt Representation，再与真实文本表示共同送入 pretrained DeBERTa。
+
+主要流程：
+
+`Virtual Tokens → Prompt Encoder → Continuous Prompt Representation → Pretrained DeBERTa-large → Classification Head → Sentiment`
+
+### P-Tuning 配置
+
+* Base Model：`microsoft/deberta-large`
+* PEFT Method：P-Tuning
+* Virtual tokens：20
+* Prompt Encoder hidden size：128
+* Backbone：Frozen
+* Classification head：Trainable
+* Gradient checkpointing：Enabled
+* Checkpoint interval：每 500 optimizer steps
+
+最佳 Validation Accuracy：**95.58%**
+
+Kaggle Score：**96.032%**
+
+---
+
 ## Kaggle 实验结果
 
 目前所有有效模型生成的 CSV 文件均已提交至 Kaggle **“Bag of Words Meets Bags of Popcorn”** 竞赛。
@@ -307,3 +536,24 @@ Kaggle Score：**0.93268**
 | BERT-base-uncased Fine-tuning             |  **0.93268** |
 
 在当前实验配置下，**BERT-base-uncased Fine-tuning** 获得了最高的 Kaggle Score：**0.93268**。
+
+---
+
+## 新增模型实验结果
+
+在完成 BERT 后，进一步实验了 RoBERTa、DeBERTa 以及基于 DeBERTa-large 的多种 Parameter-Efficient Fine-Tuning 方法。
+
+| 方法 | Best Validation Accuracy | Kaggle Score |
+| --- | ---: | ---: |
+| RoBERTa-large Full Fine-tuning | **96.18%** | **96.35%** |
+| DeBERTa-Large Full Fine-tuning | 95.74% | 96.03% |
+| DeBERTa-Large + LoRA | 96.08% | **96.396%** |
+| DeBERTa-Large + AdaLoRA | 94.96% | 95.568% |
+| DeBERTa-Large + Prefix Tuning | 95.26% | 95.884% |
+| DeBERTa-Large + P-Tuning | 95.58% | 96.032% |
+
+前述 BERT 结果为完成 BERT 阶段时的阶段性最高结果。
+
+加入 RoBERTa、DeBERTa 与 PEFT 实验后，在当前实验配置下，**DeBERTa-Large + LoRA** 获得了目前最高的 Kaggle Score：**96.396%**。
+
+同时，LoRA 仅训练约 **0.6419%** 的模型参数，即获得了与 RoBERTa-large Full Fine-tuning 相当的分类性能，体现了 Parameter-Efficient Fine-Tuning 在大规模预训练模型下游适配中的参数效率。
